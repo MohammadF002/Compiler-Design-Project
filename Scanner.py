@@ -1,4 +1,3 @@
-from functools import reduce
 from enum import Enum
 import re
 
@@ -25,9 +24,14 @@ class States(Enum):
     SYM_C = 'Symbol Complete'
     COM_C = 'Comment Complete'
 
-    ErrII = 'Error: Invalid Input'
-    ErrUCC = 'Error: Unclosed Comment'
-    ErrUMC = 'Error: Unmatched Comment'
+    ErrII = 'Invalid Input'
+    ErrIN = 'Invalid Number'
+    ErrUCC = 'Unclosed Comment'
+    ErrUMC = 'Unmatched Comment'
+
+    FINISHING_STATES = [NUM_C, IKW_C, WS_C, SYM_C, COM_C, ErrII, ErrIN, ErrUCC, ErrUMC]
+    ERROR_STATES = [ErrII, ErrIN, ErrUCC, ErrUMC]
+    SUCCESS_FINISH_STATES = [NUM_C, IKW_C, WS_C, SYM_C, COM_C]
 
 
 class Transitioner:
@@ -35,17 +39,97 @@ class Transitioner:
     SYM_RXP = '[' + ''.join(Constants.SYMBOLS) + ']'
     TRANSITIONS = {
         States.START: [
-            (f'^\d({WS_RXP}|{''.join(Constants.SYMBOLS)}{Constants.EOF}]$', States.NUM_C)
+            (f'^\d({WS_RXP}|{"".join(Constants.SYMBOLS)}|{Constants.EOF}]$', States.NUM_C),
             ('^\d.$', States.NUM_R),
             (f'^[A-Za-z]({WS_RXP}|{SYM_RXP}|{Constants.EOF})$', States.IKW_C),
             ('^[A-Za-z].$', States.IKW_R),
             (f'^{WS_RXP}{{2}}$', States.WS_R),
-            (f'^{WS_RXP}.$', States.WS_C)
-            ('^\/\*$', States.SYM_R),
+            (f'^{WS_RXP}.$', States.WS_C),
+            ('^\/\*$', States.COM_R),
             ('^\*\/$', States.ErrUMC),
             ('^==$', States.SYM_R),
             (f'^[{SYM_RXP}]$', States.SYM_C),
-
+        ],
+        States.NUM_R: [
+            (f'^\d({WS_RXP}|{"".join(Constants.SYMBOLS)}|{Constants.EOF}]$', States.NUM_C),
+            ('^\d.$', States.NUM_R),
+            ('^[A-Za-z].$', States.ErrII),
+        ],
+        States.NUM_C: [
+            (f'^[A-Za-z]({WS_RXP}|{SYM_RXP}|{Constants.EOF})$', States.IKW_C),
+            ('^[A-Za-z].$', States.IKW_R),
+            (f'^{WS_RXP}{{2}}$', States.WS_R),
+            (f'^{WS_RXP}.$', States.WS_C),
+            ('^\/\*$', States.COM_R),
+            ('^\*\/$', States.ErrUMC),
+            ('^==$', States.SYM_R),
+            (f'^[{SYM_RXP}]$', States.SYM_C),
+        ],
+        States.IKW_R: [
+            (f'^[A-Za-z]({WS_RXP}|{SYM_RXP}|{Constants.EOF})$', States.IKW_C),
+            ('^[A-Za-z].$', States.IKW_R),
+            ('^\d.$', States.ErrII),
+        ],
+        States.IKW_C: [
+            (f'^\d({WS_RXP}|{"".join(Constants.SYMBOLS)}|{Constants.EOF}]$', States.NUM_C),
+            ('^\d.$', States.NUM_R),
+            (f'^{WS_RXP}{{2}}$', States.WS_R),
+            (f'^{WS_RXP}.$', States.WS_C),
+            ('^\/\*$', States.COM_R),
+            ('^\*\/$', States.ErrUMC),
+            ('^==$', States.SYM_R),
+            (f'^[{SYM_RXP}]$', States.SYM_C),
+        ],
+        States.WS_R: [
+            (f'^{WS_RXP}{{2}}$', States.WS_R),
+            (f'^{WS_RXP}.$', States.WS_C),
+        ],
+        States.WS_C: [
+            (f'^\d({WS_RXP}|{"".join(Constants.SYMBOLS)}|{Constants.EOF}]$', States.NUM_C),
+            ('^\d.$', States.NUM_R),
+            (f'^[A-Za-z]({WS_RXP}|{SYM_RXP}|{Constants.EOF})$', States.IKW_C),
+            ('^[A-Za-z].$', States.IKW_R),
+            ('^\/\*$', States.COM_R),
+            ('^\*\/$', States.ErrUMC),
+            ('^==$', States.SYM_R),
+            (f'^[{SYM_RXP}]$', States.SYM_C),
+        ],
+        States.SYM_R: [
+            (f'^[{SYM_RXP}].$', States.SYM_C),
+        ],
+        States.SYM_C: [
+            (f'^\d({WS_RXP}|{"".join(Constants.SYMBOLS)}|{Constants.EOF}]$', States.NUM_C),
+            ('^\d.$', States.NUM_R),
+            (f'^[A-Za-z]({WS_RXP}|{SYM_RXP}|{Constants.EOF})$', States.IKW_C),
+            ('^[A-Za-z].$', States.IKW_R),
+            (f'^{WS_RXP}{{2}}$', States.WS_R),
+            (f'^{WS_RXP}.$', States.WS_C),
+            ('^\/\*$', States.COM_R),
+            ('^\*\/$', States.ErrUMC),
+            ('^==$', States.SYM_R),
+            (f'^[{SYM_RXP}]$', States.SYM_C),
+        ],
+        States.COM_R: [
+            ('^\*.$', States.COM_HC),
+            ('^..$', States.COM_R),
+            (f'^.({Constants.EOF})', States.ErrUCC)
+        ],
+        States.COM_HC: [
+            ('^\/.$', States.COM_C),
+            ('^\*.$', States.COM_HC),
+            ('^..$', States.COM_R)
+        ],
+        States.COM_C: [
+            (f'^\d({WS_RXP}|{"".join(Constants.SYMBOLS)}|{Constants.EOF}]$', States.NUM_C),
+            ('^\d.$', States.NUM_R),
+            (f'^[A-Za-z]({WS_RXP}|{SYM_RXP}|{Constants.EOF})$', States.IKW_C),
+            ('^[A-Za-z].$', States.IKW_R),
+            (f'^{WS_RXP}{{2}}$', States.WS_R),
+            (f'^{WS_RXP}.$', States.WS_C),
+            ('^\/\*$', States.COM_R),
+            ('^\*\/$', States.ErrUMC),
+            ('^==$', States.SYM_R),
+            (f'^[{SYM_RXP}]$', States.SYM_C),
         ]
     }
     
@@ -53,88 +137,106 @@ class Transitioner:
         self.cur_state = States.START
 
 
-    def get_next_state(sefl, two_char):
-
-
-
-class Matcher:
-    cur_state = States.START
+    def transition(self, last_char, lookahead):
+        cur_transitions = Transitioner.TRANSITIONS[self.cur_state]
+        matched_transition = filter(lambda t: re.match(t[0], last_char + lookahead), cur_transitions)[0]
+        self.cur_state = matched_transition[1]
+        return self.cur_state
 
 
 class Scanner:
 
-    def __init__(self, source_location: str ="input.txt"):
-        self.initialize_symbol_table()
-        self.code
+    def __read_file(self, loc):
+        with open(loc, 'r') as file:
+            lines = file.readlines()
+            return lines
+
+
+    def __init__(self, 
+                 code_source: str ="input.txt",
+                 tokens_dest: str ="tokens.txt",
+                 error_dest: str ="lexical_errors.txt",
+                 symtable_loc: str = "symbol_table.txt"):
+        open(symtable_loc, 'a').close()
+        self.code_lines = self.__read_file(loc=code_source)
         self.pointer = 0
-        self.matchers = self.initialize_matchers()
+        self.line_pointer = 0
+        self.transitioner = Transitioner()
+        self.token_dest = tokens_dest
+        self.error_dest = error_dest
+        self.symbol_table_loc = symtable_loc
+        self.eof_reached = False
 
-    def get_next_char(self):
-        pass
+    def __write_error(self, message):
+        with open(self.error_dest, 'a') as file:
+            file.write(f'\nLineNo.{self.line_pointer + 1}: ' + message)
 
-    def get_look_ahead(self):
-        pass
-    
-    def token_matcher(self, token, lookahead):
-        token_plus_lookahead = token + lookahead
-        lookahead_matchers = [
-            self.match_NUM(token_plus_lookahead),
-            self.match_ID(token_plus_lookahead),
-            self.match_KEYWORD(token_plus_lookahead),
-            self.match_SYMBOL(token_plus_lookahead),
-            self.match_COMMENT(token_plus_lookahead),
-            self.match_WHITESPACE(token_plus_lookahead)
-            ]
-        any_match = reduce(lambda x, y: x or y, lookahead_matchers)
+    def symbol_table_get(self, token):
+        with open(self.symbol_table_loc, 'r') as file:
+            lines = file.readlines
+            return filter(lambda l: l.split()[0] == token, lines)[0]
         
-        if any_match:
-            return None
-        
-        token_matchers = [
-            (self.match_NUM(token), "TOKEN"),
-            (self.match_ID(token), "ID"),
-            (self.match_KEYWORD(token), "KEYWORD"),
-            (self.match_SYMBOL(token), "SYMBOL"),
-            (self.match_COMMENT(token), "COMMENT"),
-            (self.match_WHITESPACE(token), "WHITESPACE")
-        ]
-        match = next(filter(lambda x: x[0], token_matchers), None)
-        return match
-    
+    def symbol_table_append(self, token, type):
+        with open(self.symbol_table_loc, 'a') as file:
+            file.write(f'\n{token} {type}')
+            
+
+    def move_one_char_forward(self):
+        line = self.code_lines[self.line_pointer]
+        if self.pointer == len(line) - 1:
+            if self.line_pointer == len(self.code_lines) - 1:
+                self.eof_reached = True
+            
+            self.line_pointer += 1
+            self.pointer = 0
+        else:
+            self.pointer += 1
+
+    def get_pointing_char(self):
+        line = self.code_lines[self.line_pointer]
+        char = line[self.pointer]
+        return char
+
     def get_lookahead(self):
-        pass
+        line = self.code_lines[self.line_pointer]
+        if self.pointer == len(line) - 1:
+            if self.line_pointer == len(self.code_lines) - 1:
+                return Constants.EOF
+            line = self.code_lines[self.line_pointer + 1]
+            lookahead = line[0]
+            return lookahead
+        lookahead = line[self.pointer + 1]
+        return lookahead
+
+    def shorten(self, token):
+        message = token if len(token) <= 6 else token[:6] + '...'
+        return message
 
     def get_next_token(self):
-        token = self.get_next_char()
-        lookahead = self.get_look_ahead()
-        match = self.token_matcher(token, lookahead)
-        while not match:
-            token += self.get_next_char()
-            match = self.token_matcher(token, lookahead)
-        self.update_parameters(match)
-        return token
+        last_char = self.get_pointing_char()
+        lookahead = self.get_lookahead()
+        token = last_char
+        state = self.transitioner.transition(last_char, lookahead)
+        while not state in States.FINISHING_STATES and not self.eof_reached:
+            self.move_one_char_forward()
+            last_char = self.get_pointing_char()
+            lookahead = self.get_lookahead()
+            token += last_char
+            state = self.transitioner.transition(last_char, lookahead)
+        
+        if self.eof_reached:
+            return None
+        
+        
+        if state in States.ERROR_STATES:
+            token_message = self.shorten(token) if state == States.ErrUCC else token
+            self.__write_error(f'({token_message}, {state.value})')
+            return self.get_next_token()
+        
+        if state == States.IKW_C:
+            search_res = self.symbol_table_get(token)
+            type = "KEYWORD" if token in Constants.KEYWORDS else "ID"
+            if not search_res:
+                self.symbol_table_append(token, type)
 
-    def match_NUM(self, token):
-        pattern = re.compile("^[0-9]+$")
-        match = pattern.match(token)
-        return match and (token, "NUM")
-
-    def match_ID(self, token):
-        pattern = re.compile("^([A-Z]|[a-z])([A-Z]|[a-z]|[0-9])*")
-        match = pattern.match(token)
-        return match and (token, "ID")
-
-    def match_KEYWORD(self, token):
-        match = token in self.KEYWORDS
-        return match and (token, "KEYWORD")
-
-    def match_SYMBOL(self, token):
-        match = token in self.SYMBOLS
-        return match and (token, "SYMBOL")
-
-    def match_COMMENT(self):
-        pattern_1 = re.compile("^/*[^(\/*)]*\*/$")
-
-    def match_WHITESPACE(self):
-        pass
-
+        
